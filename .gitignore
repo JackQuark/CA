@@ -108,3 +108,14 @@ CA5/files/121.75653_24.76398.nc
 CA5/files/121.78121_25.07118.nc
 CA5/files/121.83080_24.85323.nc
 CA5/files/121.84248_24.49709.nc
+package/__init__.py
+package/Q_func.py
+sparrow.py
+sparrow copy.py
+maze_print.py
+maze_plot.py
+spots_info.csv
+spots_info.xlsx
+CA5/CA5_GPT.py
+CA5/CA5_.py
+CA5/__pycache__/CA5_.cpython-311.pyc
