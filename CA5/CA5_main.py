@@ -36,8 +36,13 @@ class Location:
         self.file = f'files/{self.loc[0]}_{self.loc[1]}.nc'  
             
     def load(self):
-        self.id, self.lon, self.lat, self.lu = np.loadtxt('..\spots_info.csv', 
-                        delimiter=',', skiprows=1, usecols=(0,2,3,5), unpack=True)
+        self.id = \
+            np.loadtxt('..\spots_info.csv', dtype=str,
+                       delimiter=',', skiprows=1, usecols=(0), unpack=True)
+            
+        self.lon, self.lat, self.lu = \
+            np.loadtxt('..\spots_info.csv', dtype=float,
+                       delimiter=',', skiprows=1, usecols=(2,3,5), unpack=True)
         
 # ==================================================
 # thermo functioms
@@ -227,14 +232,11 @@ class Mix:
 def main():
     global locate, thermo, vvm, mix
     
-    locate = Location(cache='asdlkj')
+    locate = Location(cache='Quark')
     thermo = Thermo()
     vvm    = VVM(locate.file)
     mix    = Mix()
     
-    print(locate.loc)
-    
-    return
     def TcZc(qvm, qvs):
 
         Zc, Tc = [], []
@@ -373,7 +375,8 @@ class Draw:
         
     def saveanim(self, input_anim: FuncAnimation, frames):
         FFwriter = FFMpegWriter(fps = frames/12)
-        input_anim.save(f'CA5_{vvm.lon}E_{vvm.lat}N_{frames}f.mp4', writer=FFwriter)
+        input_anim.save(f'videos/CA5_{locate.loc[0]}E_{locate.loc[1]}N_{frames}f.mp4', 
+                        writer=FFwriter)
 
 # ==================================================
 if __name__ == '__main__':
