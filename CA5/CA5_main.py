@@ -13,26 +13,38 @@ from matplotlib.animation import *
 # ==================================================
 # location info
 class Location:
-    
+
     def __init__(self, **kwargs):
+
+        if 'id' in kwargs:
+            self.load()
+                
+            if kwargs['id'] in self.id:
+                idx = int(np.where(self.id == kwargs['id'])[0])
+                self.loc = [self.lon[idx], self.lat[idx]]
+                
+            else:
+                raise ValueError('Invalid ID')
         
-        for key, value in kwargs.items():
-            if key == 'cache':
-            
-                self.cache: dict = {
+        elif 'name' in kwargs:
+            self.cache: dict = {
                     'Quark': [120.32586, 23.96824],
                     'Yushan': [120.95952, 23.48761],
                     'Sparrow': [121.01422, 24.82785],
                     'Taipei': [121.51485, 25.03766],
                     'Vincent': [121.61328, 23.97513],
-                    'Gary': [121.62970, 24.14743]
+                    'Gary': [121.62970, 24.14743],
+                    'Cubee': [121.74103, 24.26676 ]
                     }
-                
-                if value in self.cache:
-                    self.loc = self.cache[value]
-                else:
-                    raise ValueError('Invalid cache location')
-        
+            
+            if kwargs['name'] in self.cache:
+                self.loc = self.cache[kwargs['name']]
+            else:
+                raise ValueError('Invalid cache name')
+            
+        else:
+            self.loc = [120.32586, 23.96824]
+
         self.file = f'files/{self.loc[0]}_{self.loc[1]}.nc'  
             
     def load(self):
@@ -43,7 +55,7 @@ class Location:
         self.lon, self.lat, self.lu = \
             np.loadtxt('..\spots_info.csv', dtype=float,
                        delimiter=',', skiprows=1, usecols=(2,3,5), unpack=True)
-        
+
 # ==================================================
 # thermo functioms
 class Thermo:
@@ -55,21 +67,14 @@ class Thermo:
         self.Rv = 461. # J/kg/K
         self.g  = 9.81 # m/s^2
         
-        self.A  = 2.53e11 # Pa
-        self.B  = 5420 # K
-        
         self.Gamma_d = self.g / self.Cp # K/m
     
     def th_2_T(self, th, P):
-        T = th * (P / 100000)**(self.Rd/self.Cp)
+        T = th * (P / 1e5)**(self.Rd/self.Cp)
         return T
 
     def cc_equation(self, T):
         es = 611.2 * np.exp(self.Lv/self.Rv * (1/273 - 1/T)) # Pa
-        return es
-    
-    def cc_AB(self, T):
-        es = self.A * np.exp(-self.B / T) # Pa
         return es
         
     def es_2_qvs(self, es, P):
@@ -82,16 +87,7 @@ class Thermo:
 class VVM:
     
     def __init__(self, file: str):
-            
-        self.load(file)
-        self.Qth  = integrate.cumtrapz(self.wth, dx=600., initial=0) / self.rho[0]
-        self.Qqv  = integrate.cumtrapz(self.wqv, dx=600., initial=0) / self.rho[0]
         
-        self.temp = thermo.th_2_T(self.th, self.p_zc)
-        self.es   = thermo.cc_equation(self.temp)
-        self.qvs  = thermo.es_2_qvs(self.es, self.p_zc)
-        
-    def load(self, file: str):
         rootgrp = nc.Dataset(file)
 
         topo: int = rootgrp.variables['topo'][0]
@@ -104,7 +100,13 @@ class VVM:
         self.wqv : np.ndarray = rootgrp.variables['wqv' ][:]
 
         rootgrp.close()
-
+            
+        self.Qth  = integrate.cumtrapz(self.wth, dx=600., initial=0) / self.rho[0]
+        self.Qqv  = integrate.cumtrapz(self.wqv, dx=600., initial=0) / self.rho[0]
+        self.temp = thermo.th_2_T(self.th, self.p_zc)
+        self.es   = thermo.cc_equation(self.temp)
+        self.qvs  = thermo.es_2_qvs(self.es, self.p_zc)
+        
 # ==================================================
 # Mixed data
 class Mix:
@@ -125,7 +127,6 @@ class Mix:
         self.slope_qv = (m_zc[1:] - m_zc[:-1]) / (qv[0, 1:] - qv[0, :-1])
         self.z_th_ = integrate.cumtrapz(self.relate_zc, th[0, :], initial=0)
         self.z_qv_ = integrate.cumtrapz(qv[0, :], self.relate_zc, initial=0)
-        
         # index which mixed layer should insert
         self.lev = np.searchsorted(self.z_th_, Qth, side='right')
 
@@ -157,8 +158,8 @@ class Mix:
         
     # insert 2 points at Zm
     def mix_profile(self, th, qv, m_zc, p_zc):
-
         level    = np.where(self.lev == 0, 1, self.lev)
+        
         P_slope  = (p_zc[1:] - p_zc[:-1]) / (m_zc[1:] - m_zc[:-1])
         self.m_zc   = np.zeros((145, len(m_zc)+2))
         self.p_zc   = np.zeros((145, len(m_zc)+2))
@@ -173,8 +174,8 @@ class Mix:
             self.m_zc[i, level[i]+2:]         = m_zc[level[i]:]
             
             self.p_zc[i, :level[i]]           = p_zc[:level[i]]
-            self.p_zc[i, level[i]:level[i]+2] = p_zc[level[i]-1] + P_slope[level[i]-1]\
-                                                * (self.H_est[i] - m_zc[level[i]-1])
+            self.p_zc[i, level[i]:level[i]+2] = p_zc[level[i]-1] + (P_slope[level[i]-1]
+                                                * (self.H_est[i] - m_zc[level[i]-1]))
             self.p_zc[i, level[i]+2:]         = p_zc[level[i]:]
             
             self.th[i, :level[i]+2] = self.th_est[i]
@@ -192,78 +193,40 @@ class Mix:
             
             self.temp_d[i, :] = self.temp[i, 0] - diff_z * thermo.Gamma_d
         
-
-    def mix_profile2(self, th, qv, m_zc, p_zc):
-        level = np.where(self.lev == 0, 1, self.lev)
-        P_slope = (p_zc[1:] - p_zc[:-1]) / (m_zc[1:] - m_zc[:-1])
-        mix_zc, mix_p, mix_th, mix_qv, mix_temp, Temp_d = [], [], [], [], [], []
-        
-        for i in range(145): # [time, level+2]
-
-            mix_zc.append(np.concatenate((m_zc[:level[i]], 2*[self.H_est[i]], 
-                                        m_zc[level[i]:])))
-            
-            mix_p. append(np.concatenate((p_zc[:level[i]], 2*[p_zc[level[i]-1] + P_slope[level[i]-1] * 
-                                        (self.H_est[i]-m_zc[level[i]-1])], p_zc[level[i]:])))
-            
-            mix_th.append(np.concatenate((np.full((level[i]+2), self.th_est[i]),
-                                        th[0, level[i]:])))
-            
-            mix_qv.append(np.concatenate((np.full((level[i]+1), self.qv_est[i]),
-                                        [self.qv_Zm[i]], qv[0, level[i]:])))
-            
-            diff_z = np.cumsum(np.append(0, np.diff(mix_zc[i])))
-            
-            mix_temp.append(np.concatenate((thermo.th_2_T(mix_th[i][0], mix_p[i][0])
-                                            - diff_z[:level[i]+2] * thermo.Gamma_d,
-                        thermo.th_2_T(th[0, level[i]:], p_zc[level[i]:]))))
-            
-            Temp_d.append(mix_temp[i][0] - diff_z * thermo.Gamma_d)
-        
-        self.m_zc   = np.array(mix_zc)
-        self.p_zc   = np.array(mix_p)
-        self.th     = np.array(mix_th)
-        self.qv     = np.array(mix_qv)
-        self.temp   = np.array(mix_temp)
-        self.temp_d = np.array(Temp_d)
-
 # ==================================================
 # main   
 def main():
     global locate, thermo, vvm, mix
     
-    locate = Location(cache='Quark')
+    locate = Location(name = 'Quark')
+    #locate = Location(id = 'B12209017')
     thermo = Thermo()
     vvm    = VVM(locate.file)
     mix    = Mix()
     
     def TcZc(qvm, qvs):
-
-        Zc, Tc = [], []
+        
+        Zc, = [],
         for i in range(145):
             lev = len(np.where(qvm[i] < qvs[i])[0]) - 1
-            if lev < 0:
-                Zc.append(np.nan)
-                continue
             
             dqv = qvm[i] - qvs[i, lev]
             dz  = dqv * (mix.m_zc[i, lev+1] - mix.m_zc[i, lev]) / (qvs[i, lev+1] - qvs[i, lev])
             Zc.append(mix.m_zc[i, lev] + dz)
         
-        return np.array(Tc), np.array(Zc)
+        return np.array(Zc)
     
     global Zc
-
-    Tc, Zc = TcZc(mix.qv[:,0], mix.qvs_d)
+    Zc = TcZc(mix.qv[:,0], mix.qvs_d)
     
-    Draw('anim', frames=24, save=True)
+    Draw('anim', frames=6, save=True)
     
 # ==================================================
 # Draw
 class Draw:
     
     def __init__(self, type: str, save: bool = False, **kwargs) -> None:
-        self.fig = plt.figure(figsize=(10, 8))
+        self.fig = plt.figure(figsize=(8, 6))
         self.t_step = np.linspace(0, 144, 145)
         
         if type == 'anim':
@@ -286,88 +249,118 @@ class Draw:
         
     def animate(self, frames):
         
-        ax1 = plt.subplot2grid((2, 2), (0, 0), colspan=2)
-        ax2 = plt.subplot(2, 2, 3)
-        ax3 = plt.subplot(2, 2, 4, sharey=ax2)
-        ax22= ax2.twinx()
-        ax33= ax3.twinx()
+        ax_th  = plt.subplot(2, 2, 1)
+        ax_qv  = plt.subplot(2, 2, 2)
+        ax_wth = plt.subplot(3, 2, 5)
+        ax_wqv = plt.subplot(3, 2, 6)
+        ax22   = ax_th.twinx()
+        ax33   = ax_qv.twinx()
+        ax_wqv.sharex(ax_wth)
         
-        self.fig.subplots_adjust(top=0.9, bottom=0.1, hspace=0.3)
-        
+        self.fig.subplots_adjust(bottom=0.1, top=0.75, hspace=0.3, wspace=0.25,
+                                 left=0.1, right=0.9,)
+    
         top_lim = max(mix.lev) + 5
         
-        line_Zc, = ax1.plot(self.t_step, Zc, '-', lw=1, c='b', label='Zc')
-        line_Zcm,= ax1.plot(self.t_step, np.where(Zc > mix.H_est, np.nan, Zc), '--', lw=1, c='springgreen', label='Zcm')
-        line_Zm, = ax1.plot(self.t_step, mix.H_est, '-', lw=1, c='orange', label='Zm')
+        th_bbox = ax_th.get_position()
+        qv_bbox = ax_qv.get_position()
         
-        ax2.plot(vvm.th[0, :top_lim], vvm.m_zc[:top_lim], '--', lw=1, c='violet', label=r'Init. $\theta$')
-        ax2.plot(vvm.temp[0, :top_lim], vvm.m_zc[:top_lim], '--', lw=1, c='cyan', label='Init. Temp')
-        line_dry1, = ax2.plot([], [], '--', lw=1, c='g', label=r'$\Gamma_d$')
-        line_mix_th, = ax2.plot(mix.th[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='r', label=r'Est. $\theta$')
-        line_mix_temp, = ax2.plot(mix.temp[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='b', label='Est. Temp')
-        line_H1, = ax2.plot(ax2.get_xlim(), np.full((2), mix.H_est[0]), '--', lw=1, c='orange', label=None)
+        ax_th.set_position([th_bbox.x0, th_bbox.y0-0.025, th_bbox.width, th_bbox.height*1.2])
+        ax_qv.set_position([qv_bbox.x0, qv_bbox.y0-0.025, qv_bbox.width, qv_bbox.height*1.2])
         
-        ax3.plot(vvm.qv[0, :top_lim], vvm.m_zc[:top_lim], '--', lw=1, c='cyan')
-        line_dry2, = ax3.plot(mix.qvs_d[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '--', lw=1, c='g', label=r'$\Gamma_d$ qvs')
-        line_mix_qv, = ax3.plot(mix.qv[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='b', label='Est. qv')
-        line_mix_qvs, = ax3.plot(mix.qvs[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='g', label='Est. qvs')
-        line_H2, = ax3.plot(ax3.get_xlim(), np.full((2), mix.H_est[0]), '--', lw=1, c='orange', label='Mixed height')
-        dash_Zc, = ax3.plot([], [], '--', c='r', label='Zc', lw=1)
-        dot_Zc, = ax3.plot([], [], 'o', c='r', label=None, ms=3)
+        # init
+        # =====sub_th=====
+        ax_th.plot(vvm.th[0, :top_lim], vvm.m_zc[:top_lim], '--', lw=1, c='violet', label=r'Init. $\theta$')
+        ax_th.plot(vvm.temp[0, :top_lim], vvm.m_zc[:top_lim], '--', lw=1, c='cyan', label='Init. Temp')
+        line_dry1, = ax_th.plot([], [], '--', lw=1, c='g', label=r'$\Gamma_d$')
+        line_mix_th, = ax_th.plot(mix.th[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='r', label=r'Est. $\theta$')
+        line_mix_temp, = ax_th.plot(mix.temp[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='b', label='Est. Temp')
+        dash_Zm1, = ax_th.plot(ax_th.get_xlim(), np.full((2), mix.H_est[0]), '--', lw=1, c='orange', label=None)
+        # =====sub_qv=====
+        ax_qv.plot(vvm.qv[0, :top_lim], vvm.m_zc[:top_lim], '--', lw=1, c='cyan', label='Init. qv')
+        line_mix_qv, = ax_qv.plot(mix.qv[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='b', label='Est. qv')
+        line_mix_qvs, = ax_qv.plot(mix.qvs[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '-', lw=1, c='g', label='Est. qvs')
+        line_dry2, = ax_qv.plot(mix.qvs_d[0, :top_lim+2], mix.m_zc[0, :top_lim+2], '--', lw=1, c='g', label=r'$\Gamma_d$ qvs')
+        dash_Zm2, = ax_qv.plot(ax_qv.get_xlim(), np.full((2), mix.H_est[0]), '--', lw=1, c='orange', label='Zm')
+        dash_Zc, = ax_qv.plot([], [], '--', c='r', label='Zc', lw=1)
+        dot_Zc, = ax_qv.plot([], [], 'o', c='r', label=None, ms=3)
+        # =====sub_wth=====
+        ax_wth.plot(self.t_step, vvm.wth, '-', lw=1, c='r', label='wth')
+        ax_wth.plot(self.t_step, np.full((len(self.t_step)), 0), '--', lw=0.8, c='k', label=None)
+        # =====sub_wqv=====
+        ax_wqv.plot(self.t_step, vvm.wqv*1e3, '-', lw=1, c='b', label='wqv')
+        ax_wqv.plot(self.t_step, np.full((len(self.t_step)), 0), '--', lw=0.8, c='k', label=None)
         
-        ax1.set_title('Zm / Zc / Zcm time series')
-        ax1.set_xticks(np.linspace(0, 144, 13), labels=np.linspace(0, 24, 13))
-        ax1.set_yticks(np.append(ax1.get_yticks(), vvm.m_zc[0]))
-        ax1.set_xlim([0, 144])
-        ax1.set_ylim([vvm.m_zc[0], ax1.get_ylim()[1]])
-        ax1.set_xlabel('Time [LST]')
-        ax1.set_ylabel('Height [m]')
-        ax1.legend(loc=2)
-        ax1.grid()
-        
-        ax2.set_title(r'$\theta$ / Temp.')
-        ax2.set_xlim(line_H1.get_xdata())
-        ax2.set_ylim([vvm.m_zc[0], vvm.m_zc[top_lim-1]])
-        ax2.set_xlabel('[K]')
-        ax2.set_ylabel('Height [m]')
-        ax2.legend(loc=3, fontsize=8)
-        ax2.grid()
-        ax22.set_ylim(ax2.get_ylim())
-        
-        ax3.set_title(r'qv / qvs')
-        ax3.tick_params(axis='y', right=False, left=False)
-        ax3.set_xlim(line_H2.get_xdata())
-        ax3.set_xlabel('[kg/kg]')
-        ax3.legend(fontsize=8)
-        ax3.grid()
+        # setting
+        # =====sub_th=====
+        ax_th.set_title(r'$\theta$ / Temp.', loc='left')
+        ax_th.set_yticks(np.arange(vvm.m_zc[0], vvm.m_zc[top_lim], 200))
+        ax_th.set_xlim(dash_Zm1.get_xdata())
+        ax_th.set_ylim([vvm.m_zc[0], vvm.m_zc[top_lim-1]])
+        ax_th.set_xlabel('[K]')
+        ax_th.set_ylabel('Height [m]')
+        ax_th.legend(loc='lower right', bbox_to_anchor=(1, 1), 
+                    ncols=2, handlelength=1, fontsize=8)
+        ax_th.grid()
+        ax22.set_ylim(ax_th.get_ylim())
+        # =====sub_qv=====
+        ax_qv.set_title(r'qv / qvs', loc='left')
+        ax_qv.tick_params(axis='y', right=False, left=False)
+        ax_qv.set_yticks(ax_th.get_yticks())
+        ax_qv.set_xlim(dash_Zm2.get_xdata())
+        ax_qv.set_ylim([vvm.m_zc[0], vvm.m_zc[top_lim-1]])
+        ax_qv.set_yticklabels([])
+        ax_qv.set_xlabel('[kg/kg]')
+        ax_qv.legend(loc='lower right', bbox_to_anchor=(1, 1), 
+                    ncols=2, handlelength=1, fontsize=8)
+        ax_qv.grid()
         ax33.tick_params(axis='y', right=True, left=False)
-        ax33.set_ylim(ax2.get_ylim())
+        ax33.set_ylim(ax_th.get_ylim())
+        # =====sub_wth=====
+        ax_wth.set_title(r'Surface flux of $\theta$', loc='left')
+        ax_wth.set_xticks(np.arange(0, 144.1, 24), labels=np.arange(0, 24.1, 4, dtype=int))
+        ax_wth.set_xlim([0, 144])
+        ax_wth.set_xlabel('Time [h]')
+        ax_wth.set_ylabel(r'K kg $m^{-2}$ $s^{-1}$')
+        #ax_wth.grid()
+        # =====sub_wqv=====
+        ax_wqv.set_title(r'Surface flux of qv', loc='left')
+        ax_wqv.set_xlabel('Time [h]')
+        ax_wqv.set_ylabel(r'g $m^{-2}$ $s^{-1}$')
+        #ax_wqv.grid()
+        
         
         def update(i):
             
-            line_Zm.set_data(self.t_step[:i+1], mix.H_est[:i+1])
-            line_Zc.set_data(self.t_step[:i+1], Zc[:i+1])
-            line_Zcm.set_data(self.t_step[:i+1], np.where(Zc[:i+1] > mix.H_est[:i+1], np.nan, Zc[:i+1]))
+            for artist in ax_wth.collections:
+                artist . remove()
+            for artist in ax_wqv.collections:
+                artist . remove()
+                
+            ax_wth.fill_between(np.arange(0, i+1, 1), 0, vvm.wth[:i+1], color='red', alpha=0.2)
+            ax_wqv.fill_between(np.arange(0, i+1, 1), 0, vvm.wqv[:i+1]*1e3, color='blue', alpha=0.2)
             
+            # =====sub_th=====
             line_dry1.set_data(mix.temp_d[i, :top_lim+2], mix.m_zc[i, :top_lim+2])
             line_mix_th.set_data(mix.th[i, :top_lim+2], mix.m_zc[i, :top_lim+2])
             line_mix_temp.set_data(mix.temp[i, :top_lim+2], mix.m_zc[i, :top_lim+2])
-            line_H1.set_ydata(np.full((2), mix.H_est[i]))
-            
+            dash_Zm1.set_ydata(np.full((2), mix.H_est[i]))
+            # =====sub_qv=====
             line_dry2.set_data(mix.qvs_d[i, :top_lim+2], mix.m_zc[i, :top_lim+2])
             line_mix_qv.set_data(mix.qv[i, :top_lim+2], mix.m_zc[i, :top_lim+2])
             line_mix_qvs.set_data(mix.qvs[i, :top_lim+2], mix.m_zc[i, :top_lim+2])
-            line_H2.set_ydata(np.full((2), mix.H_est[i]))
+            dash_Zm2.set_ydata(np.full((2), mix.H_est[i]))
             dot_Zc.set_data(mix.qv[i, 0], Zc[i])
-            dash_Zc.set_data([mix.qv[i, 0], ax3.get_xlim()[1]], [Zc[i], Zc[i]])
+            dash_Zc.set_data([mix.qv[i, 0], ax_qv.get_xlim()[1]], [Zc[i], Zc[i]])
             
             ax22.set_yticks([mix.H_est[i]], labels=[f'Zm:{mix.H_est[i]:.1f}'], fontsize=8)
             ax33.set_yticks([Zc[i]], labels=[f'Zc:{Zc[i]:.1f}'], fontsize=8)
             
             self.fig.suptitle('TaiwanVVM simulation, tpe20110802cln\nTime: %02d:%1d0 LST @(%8sE, %8sN)' 
-                               %(int(i/6), np.mod(i, 6), locate.loc[0], locate.loc[1]))
+                               %(int(i/6), np.mod(i, 6), locate.loc[0], locate.loc[1]), 
+                               x=0.02, y=0.98, ha = 'left')
             
-            print(i)
+            print('\rFrame:{}'.format(i), end='')
             return None
     
         return (FuncAnimation(self.fig, update, repeat=True,
@@ -376,13 +369,13 @@ class Draw:
     def saveanim(self, input_anim: FuncAnimation, frames):
         FFwriter = FFMpegWriter(fps = frames/12)
         input_anim.save(f'videos/CA5_{locate.loc[0]}E_{locate.loc[1]}N_{frames}f.mp4', 
-                        writer=FFwriter)
+                        writer=FFwriter, dpi=200)
 
 # ==================================================
 if __name__ == '__main__':
     start_time = time.time()
     main()
     end_time = time.time()
-    print('\ntime : %.3f ms' %((end_time - start_time)*1000))
+    print('\ntime :%.3f ms' %((end_time - start_time)*1000))
 # ==================================================
 # zzz
