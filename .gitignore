@@ -159,3 +159,5 @@ CA7/files/121.61328_23.97513.nc
 CA7/files/121.62970_24.14743.nc
 CA6/test.py
 plot_3d_test.py
+vpy/vpy_example/GlowScriptDemos_Bounce-Callbacks-VPython.py
+vpy/main/vpy_test.py
