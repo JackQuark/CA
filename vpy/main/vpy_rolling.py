@@ -36,9 +36,12 @@ class Env(object):
         # self.base_plane = box(pos=vector(0, 0, 0), size=vector(25, 0.01, 25), 
         #                       color=color.gray(0.5))
     @ staticmethod
-    def gravity(v):
+    def gravity(v) -> vector:
         return v + vector(0, -Env.g * Env.dt, 0)
     
+    def normal_force(v, angle: float) -> vector:
+        return 
+        
     def reset(self):
         for items in self.items.values():
             items.reset()
@@ -51,12 +54,13 @@ class Env(object):
             self.scene.center = position
         except:
             pass
-        
+
 class Phys_ball(object):
     def __init__(self, x, y, z, radius):
         self.ball = sphere(pos=vector(x, y, z), radius=radius, texture=textures.earth)
-        
+        self._mass = 1
         self._velocity  = vector(0, 0, 0)
+        self._acceleration = vector(0, 0, 0)
         self.grad_v_indx = {'w': 0, 's': 0, 'a': 0, 'd': 0}
         self.ralative_speed = {'w': 0, 's': 0, 'a': 0, 'd': 0}
         
@@ -82,20 +86,18 @@ class Phys_ball(object):
         return (2*x**2 - x**4) * ratios
     
     def gradient_v(self, *keys):
-        
-        wasd = [x for x in keys if x in ['w', 'a', 's', 'd']]
-        
-        for key in wasd:
-            if self.grad_v_indx[key] < 1:
-                self.grad_v_indx[key] += 0.01
-        
-        tmp = vector(0, self.velocity.y, 0)
-        for x in self.grad_v_indx.keys():
-            if self.grad_v_indx[x] > 0:
-                self.grad_v_indx[x] -= 0.005
 
+        for key in self.grad_v_indx.keys():
+            if key in keys and self.grad_v_indx[key] < 1:
+                self.grad_v_indx[key] += Env.dt
+            elif key not in keys and self.grad_v_indx[key] > 0:
+                self.grad_v_indx[key] -= Env.dt
+                
+        tmp = vector(0, self.velocity.y, 0)
+        
+        for x in self.grad_v_indx.keys():
             tmp += self.ralative_speed[x] * \
-                self.gradient_func(self.grad_v_indx[x], 3)
+                self.gradient_func(self.grad_v_indx[x], 5)
         
         if ' ' in keys and not self.state.fly:
             tmp.y += 3
@@ -126,6 +128,11 @@ class Phys_ball(object):
         self.velocity = vector(0, 0, 0)
         self.grad_v_indx = {'w': 0, 's': 0, 'a': 0, 'd': 0}
         self.ralative_speed = {'w': 0, 's': 0, 'a': 0, 'd': 0}
+
+class Phys_box(object):
+    def __init__(self):
+        pass
+    
 
 class Game(object):
     state = True
