@@ -126,26 +126,6 @@ class Phys_plane(object):
 # ==================================================
 # 
 # ==================================================
-
-class Operator(object):
-    def __init__(self, target: object):
-        self.target = target
-        
-        self.valid_key = ['w', 'a', 'd','s', ' ', 'p']
-        
-        scene.bind('keydown', self.kb_down_cmd)
-        scene.bind('keyup', self.kb_up_cmd)
-        
-    # ========== keyboard ==========
-    def kb_down_cmd(self, event):
-        key = event.key
-        if key in self.valid_key:
-            pass
-            
-    def kb_up_cmd(self, event):
-        key = event.key
-        if key in self.valid_key:
-            pass
         
 class Game(object):
     state = True 
