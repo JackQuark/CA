@@ -42,7 +42,7 @@ class Pendulum:
             self.lines[n].modify(0, pos=vec(0, 0, n*-0.5))
             self.lines[n].modify(1, pos=vec(x[n], y[n], n*-0.5))
     
-class Opreter:
+class Operator:
     def __init__(self, scene: canvas):
         button(text='Pause', pos=scene.title_anchor, bind=self.runma)
         button(text='Reset', pos=scene.title_anchor, bind=self.reset)
@@ -70,14 +70,14 @@ class Opreter:
 # ==================================================
 
 def main():
-    global pendulum, opreter
+    global pendulum, operator
     
     pendulum = Pendulum()
-    opreter  = Opreter(pendulum.scene)
+    operator  = Operator(pendulum.scene)
     
-    while not opreter.running is None:
+    while not operator.running is None:
         rate(100)
-        pendulum(opreter.dt)
+        pendulum(operator.dt)
     
     return None
 
